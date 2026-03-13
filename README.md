@@ -155,6 +155,12 @@ For each dataset and each selected backend it:
 
 If `continue_on_error` is true, backend failures are recorded in `summary.metadata["errors"]` and the run continues.
 
+The runner is also partial-run-safe:
+
+- if request execution succeeds but a later step such as evaluation or cost modeling fails, the collected serving metrics and raw responses are still preserved
+- rankings and reports are still generated from the available data
+- incomplete backend and dataset pairs are marked as partial instead of crashing the run
+
 ### `src/llm_benchmark_suite/adapters/base.py`
 
 This defines the common backend contract.
@@ -266,6 +272,12 @@ Supported report formats:
 - `html`
 
 The generator consumes a `BenchmarkSummary` and emits human-readable and machine-readable outputs.
+
+The report generator is designed to tolerate incomplete summaries:
+
+- missing quality or cost values are rendered as `n/a`
+- report rows are still produced when only backend metrics exist
+- backend failures stored in `summary.metadata["errors"]` are surfaced in dedicated error sections in Markdown and HTML output
 
 ### `src/llm_benchmark_suite/schemas/models.py`
 
@@ -506,6 +518,8 @@ What happens during this step:
 4. each adapter returns deterministic mock responses
 5. quality, cost, ranking, and report artifacts are produced
 
+If one backend fails and `continue_on_error` is enabled in the selected profile, the run can still complete with partial output.
+
 ### Step 6: Inspect The Output Artifacts
 
 Look in the chosen output directory. You should see:
@@ -521,6 +535,13 @@ Suggested inspection order:
 1. open `summary.html` for the fastest overview
 2. inspect `summary.json` for the full machine-readable structure
 3. inspect `raw_responses.json` to see per-request normalized outputs
+
+When a run is partial rather than fully successful:
+
+- `summary.json` still contains the backend metrics that were collected successfully
+- `rankings` entries include a `status` field such as `complete` or `partial`
+- missing quality or cost values appear as `null` in JSON and `n/a` in Markdown and HTML
+- report output includes backend error details from `summary.metadata["errors"]`
 
 ### Step 7: Print Quality Metrics From The Summary
 
@@ -665,6 +686,11 @@ Contains:
 
 This is the artifact that later commands such as `evaluate`, `report`, `compare`, and `regress` consume.
 
+Additional notes:
+
+- rankings now include `status` and `missing` fields so downstream tools can tell whether a row is complete or partial
+- partial runs can contain backend metrics even when corresponding quality or cost metrics are absent
+
 ### `raw_responses.json`
 
 Contains one normalized response object per request.
@@ -679,13 +705,19 @@ Useful for:
 
 A flat table for spreadsheet-style review.
 
+If the run is partial, the CSV still includes the row and marks it as partial.
+
 ### `summary.md`
 
 A lightweight human-readable report for pull requests or artifact uploads.
 
+If the run is partial, missing values are rendered as `n/a` and a `Partial Run Errors` section is added when backend failures were recorded.
+
 ### `summary.html`
 
 A static browser-friendly report for quick inspection.
+
+If the run is partial, the HTML report still renders available rows and includes a dedicated error table for failed backend and dataset pairs.
 
 ## How Mock Mode Works
 
@@ -759,6 +791,12 @@ Current checks include:
 - `missing_pair`
 
 A regression comparison is performed per `(backend_name, dataset_name)` pair. That matters when one run contains more than one backend or more than one dataset, because each pair is evaluated independently.
+
+This means:
+
+- regressions are no longer limited to only the first backend or dataset in a summary
+- one backend can fail regression checks while another passes in the same run
+- if a backend and dataset pair exists in one summary but not the other, the suite emits a failing `missing_pair` result instead of ignoring the gap
 
 Typical workflow:
 
@@ -881,7 +919,20 @@ Inspect:
 
 - the current and baseline `summary.json`
 - whether a backend/dataset pair is missing in one run
+- whether the run completed only partially and some ranking rows have `status: partial`
 - the thresholds in `configs/thresholds/default.yaml`
+
+### Reports show `n/a` values
+
+This usually means the run was only partially complete.
+
+Check:
+
+- `summary.metadata["errors"]` in `summary.json`
+- whether evaluation failed after backend metrics were collected
+- whether cost calculation failed for one or more backend and dataset pairs
+
+This is expected behavior for partial-run-safe reporting. The suite now prefers preserving usable output over discarding the entire run.
 
 ## Current Limitations
 
@@ -891,6 +942,7 @@ Inspect:
 - text quality metrics are intentionally lightweight and not task-specialized
 - HTML reporting is static and intentionally simple
 - path validation and config validation are still fairly minimal
+- partial runs are preserved, but the current CLI and reports still summarize them in a lightweight way rather than providing a dedicated health dashboard
 
 ## Recommended First Session
 

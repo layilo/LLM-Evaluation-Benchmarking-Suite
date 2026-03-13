@@ -49,16 +49,16 @@ def run_benchmark(
                 if not adapter.health_check():
                     raise RuntimeError(f"health check failed for {backend_name}")
                 responses, backend_metrics = adapter.benchmark(dataset_cfg.name, requests)
+                summary.backend_metrics.append(backend_metrics)
+                summary.raw_responses.extend(responses)
                 accuracy_metrics = evaluate_responses(
                     backend_name, dataset_cfg.name, requests, responses
                 )
+                summary.accuracy_metrics.append(accuracy_metrics)
                 cost_metrics = compute_cost_metrics(
                     backend_metrics, accuracy_metrics, config.cost_profile
                 )
-                summary.backend_metrics.append(backend_metrics)
-                summary.accuracy_metrics.append(accuracy_metrics)
                 summary.cost_metrics.append(cost_metrics)
-                summary.raw_responses.extend(responses)
             except Exception as exc:
                 LOGGER.exception("Backend failed", extra={"context": {"backend": backend_name}})
                 if not config.continue_on_error:
@@ -99,14 +99,26 @@ def build_rankings(summary: BenchmarkSummary, weights: dict[str, float]) -> list
     max_throughput = max((item.tokens_per_second for item in summary.backend_metrics), default=1.0)
 
     for metrics in summary.backend_metrics:
-        quality = quality_lookup[(metrics.backend_name, metrics.dataset_name)].aggregate_quality
-        cost = cost_lookup[(metrics.backend_name, metrics.dataset_name)].cost_per_million_tokens_usd
+        pair = (metrics.backend_name, metrics.dataset_name)
+        quality_metrics = quality_lookup.get(pair)
+        cost_metrics = cost_lookup.get(pair)
+        quality = quality_metrics.aggregate_quality if quality_metrics is not None else None
+        cost = (
+            cost_metrics.cost_per_million_tokens_usd
+            if cost_metrics is not None
+            else None
+        )
         latency_score = max(0.0, 1 - (metrics.latency_ms_p95 / max_latency))
         throughput_score = metrics.tokens_per_second / max_throughput
-        cost_score = max(0.0, 1 - (cost / max_cost))
+        cost_score = max(0.0, 1 - (cost / max_cost)) if cost is not None else 0.0
         reliability_score = metrics.success_rate
+        missing = []
+        if quality is None:
+            missing.append("quality")
+        if cost is None:
+            missing.append("cost")
         composite = (
-            weights.get("quality", 0.35) * quality
+            weights.get("quality", 0.35) * (quality if quality is not None else 0.0)
             + weights.get("latency", 0.20) * latency_score
             + weights.get("throughput", 0.20) * throughput_score
             + weights.get("cost", 0.15) * cost_score
@@ -117,11 +129,16 @@ def build_rankings(summary: BenchmarkSummary, weights: dict[str, float]) -> list
                 "backend": metrics.backend_name,
                 "dataset": metrics.dataset_name,
                 "composite_score": round(composite, 4),
-                "quality": round(quality, 4),
+                "quality": round(quality, 4) if quality is not None else None,
                 "latency_score": round(latency_score, 4),
                 "throughput_score": round(throughput_score, 4),
                 "cost_score": round(cost_score, 4),
                 "reliability_score": round(reliability_score, 4),
+                "status": "complete" if not missing else "partial",
+                "missing": missing,
             }
         )
-    return sorted(rankings, key=lambda item: item["composite_score"], reverse=True)
+    return sorted(
+        rankings,
+        key=lambda item: (item["status"] != "complete", -float(item["composite_score"])),
+    )

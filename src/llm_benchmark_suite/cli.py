@@ -29,21 +29,24 @@ def _print_summary(summary: BenchmarkSummary) -> None:
     table = Table(title=f"Benchmark Summary: {summary.run_id}")
     table.add_column("Backend")
     table.add_column("Dataset")
+    table.add_column("Status")
     table.add_column("p95 Latency (ms)")
     table.add_column("Tokens/s")
     table.add_column("Quality")
+    metrics_lookup = {
+        (item.backend_name, item.dataset_name): item for item in summary.backend_metrics
+    }
     for ranking in summary.rankings:
-        metrics = next(
-            item
-            for item in summary.backend_metrics
-            if item.backend_name == ranking["backend"] and item.dataset_name == ranking["dataset"]
-        )
+        metrics = metrics_lookup.get((str(ranking["backend"]), str(ranking["dataset"])))
+        if metrics is None:
+            continue
         table.add_row(
-            ranking["backend"],
-            ranking["dataset"],
+            str(ranking["backend"]),
+            str(ranking["dataset"]),
+            str(ranking.get("status", "complete")),
             f"{metrics.latency_ms_p95:.2f}",
             f"{metrics.tokens_per_second:.2f}",
-            f"{ranking['quality']:.4f}",
+            "n/a" if ranking.get("quality") is None else f"{float(ranking['quality']):.4f}",
         )
     console.print(table)
 

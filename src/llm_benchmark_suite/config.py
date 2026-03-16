@@ -55,6 +55,37 @@ def apply_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _resolve_path(base_dir: Path, value: str) -> str:
+    path = Path(value)
+    if path.is_absolute():
+        return str(path)
+    profile_relative = (base_dir / path).resolve()
+    if profile_relative.exists():
+        return str(profile_relative)
+    return str(path.resolve())
+
+
+def _resolve_profile_paths(payload: dict[str, Any], base_dir: Path) -> dict[str, Any]:
+    resolved = dict(payload)
+    if "output_dir" in resolved and isinstance(resolved["output_dir"], str):
+        resolved["output_dir"] = _resolve_path(base_dir, resolved["output_dir"])
+    if "cost_profile" in resolved and isinstance(resolved["cost_profile"], str):
+        resolved["cost_profile"] = _resolve_path(base_dir, resolved["cost_profile"])
+    if "thresholds_profile" in resolved and isinstance(resolved["thresholds_profile"], str):
+        resolved["thresholds_profile"] = _resolve_path(base_dir, resolved["thresholds_profile"])
+    datasets = []
+    for dataset in resolved.get("datasets", []):
+        dataset_payload = dict(dataset)
+        if isinstance(dataset_payload.get("path"), str):
+            dataset_payload["path"] = _resolve_path(base_dir, dataset_payload["path"])
+        datasets.append(dataset_payload)
+    if datasets:
+        resolved["datasets"] = datasets
+    return resolved
+
+
 def load_run_config(path: Union[str, Path]) -> RunConfig:
-    payload = apply_env_overrides(load_yaml_file(path))
+    config_path = Path(path).resolve()
+    payload = apply_env_overrides(load_yaml_file(config_path))
+    payload = _resolve_profile_paths(payload, config_path.parent)
     return RunConfig.model_validate(payload)

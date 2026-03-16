@@ -51,6 +51,14 @@ def _print_summary(summary: BenchmarkSummary) -> None:
     console.print(table)
 
 
+def _regression_label(result: object) -> str:
+    backend_name = getattr(result, "backend_name", None)
+    dataset_name = getattr(result, "dataset_name", None)
+    if backend_name and dataset_name:
+        return f"{backend_name}/{dataset_name} {result.check_name}"
+    return str(result.check_name)
+
+
 @click.group()
 def main() -> None:
     """Run LLM benchmarking, reporting, and regression workflows."""
@@ -112,7 +120,7 @@ def compare(current: str, baseline: str, thresholds: str) -> None:
     results = compare_summaries(current_summary, baseline_summary, thresholds)
     for result in results:
         message = (
-            f"{result.check_name}: passed={result.passed} "
+            f"{_regression_label(result)}: passed={result.passed} "
             f"delta={result.delta_pct:.2f}% {result.message}"
         )
         console.print(message)
@@ -133,7 +141,7 @@ def regress(current: str, baseline: str, thresholds: str, output: Optional[str])
         write_json(output, payload)
     failing = [item for item in results if not item.passed]
     for result in results:
-        console.print(f"{result.check_name}: {'PASS' if result.passed else 'FAIL'}")
+        console.print(f"{_regression_label(result)}: {'PASS' if result.passed else 'FAIL'}")
     if failing:
         raise SystemExit(1)
 

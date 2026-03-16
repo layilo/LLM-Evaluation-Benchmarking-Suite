@@ -37,7 +37,9 @@ def load_jsonl_dataset(path: Union[str, Path]) -> list[BenchmarkRequest]:
 
 
 def write_json(path: Union[str, Path], payload: object) -> None:
-    with Path(path).open("w", encoding="utf-8") as handle:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, default=str)
 
 
@@ -45,7 +47,9 @@ def write_csv(path: Union[str, Path], rows: Iterable[dict[str, object]]) -> None
     rows = list(rows)
     if not rows:
         return
-    with Path(path).open("w", encoding="utf-8", newline="") as handle:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)

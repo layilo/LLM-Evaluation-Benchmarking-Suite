@@ -50,7 +50,11 @@ class BaseBackendAdapter(abc.ABC):
 
         if warmup_requests > 0 and requests:
             warmup_slice = requests[: min(warmup_requests, len(requests))]
-            self._run_requests(warmup_slice, concurrency=configured_concurrency, measure_offsets=False)
+            self._run_requests(
+                warmup_slice,
+                concurrency=configured_concurrency,
+                measure_offsets=False,
+            )
 
         measured_started_at = time.perf_counter()
         responses = self._run_requests(

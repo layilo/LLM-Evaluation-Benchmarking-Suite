@@ -2,8 +2,8 @@ import json
 import subprocess
 import time
 
-from llm_benchmark_suite.adapters.factory import create_adapter
 from llm_benchmark_suite.adapters.base import BaseBackendAdapter
+from llm_benchmark_suite.adapters.factory import create_adapter
 from llm_benchmark_suite.schemas.models import BenchmarkRequest, BenchmarkResponse
 
 
@@ -197,7 +197,10 @@ def test_benchmark_uses_concurrency_and_wall_clock_metrics() -> None:
     assert metrics.diagnostics["execution_mode"] == "concurrent"
     assert metrics.benchmark_wall_time_s < 0.15
     assert metrics.tokens_per_second > 200
-    assert all(response.finished_at_offset_ms >= response.started_at_offset_ms for response in responses)
+    assert all(
+        response.finished_at_offset_ms >= response.started_at_offset_ms
+        for response in responses
+    )
     assert max(response.started_at_offset_ms for response in responses) < 50.0
 
 

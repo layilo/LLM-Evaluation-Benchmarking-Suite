@@ -58,10 +58,8 @@ def render_markdown(summary: BenchmarkSummary) -> str:
     lines = [
         f"# Benchmark Summary: {summary.run_id}",
         "",
-        (
-            "| Backend | Dataset | p95 Latency (ms) | TTFT (ms) | Wall Time (s) | Concurrency | Tokens/s | "
-            "Success Rate | Quality | Cost / 1M Tokens ($) |"
-        ),
+        "| Backend | Dataset | p95 Latency (ms) | TTFT (ms) | Wall Time (s) | "
+        "Concurrency | Tokens/s | Success Rate | Quality | Cost / 1M Tokens ($) |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
